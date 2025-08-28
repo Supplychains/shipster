@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<button id="btn-pause" class="ghost">Пауза</button>
+</div>
+
+
+<div class="playfield-wrap">
+<canvas id="board" width="300" height="480" aria-label="Трюм судна"></canvas>
+<div class="sidebar">
+<div class="card mini">
+<h3>Следующий груз</h3>
+<canvas id="next" width="120" height="120"></canvas>
+<div class="meta">
+<div>Вес: <span id="meta-weight">—</span> т</div>
+<div>Доход: $<span id="meta-revenue">—</span></div>
+</div>
+</div>
+<div class="card mini">
+<h3>Предупреждения</h3>
+<div id="warnings" class="warnings"></div>
+</div>
+<div class="card mini">
+<h3>Управление</h3>
+<ul class="keys">
+<li>← / → — двигать</li>
+<li>↓ — быстрее</li>
+<li>R / ↑ — вращать</li>
+<li>Пробел — уронить</li>
+<li>P — пауза</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+
+
+<!-- Экран результата -->
+<section id="screen-result" class="screen">
+<div class="card">
+<h2>Итоги рейса</h2>
+<div class="result-grid">
+<div><span class="label">Размер судна:</span> <span id="res-size"></span></div>
+<div><span class="label">Дедвейт:</span> <span id="res-dwt"></span> т</div>
+<div><span class="label">Факт. вес:</span> <span id="res-weight"></span> т</div>
+<div><span class="label">Доход:</span> $<span id="res-revenue"></span></div>
+<div><span class="label">Заполнение трюма:</span> <span id="res-fill"></span>%</div>
+<div><span class="label">Эффективность:</span> <span id="res-eff"></span></div>
+</div>
+<div class="buttons">
+<button id="btn-restart" class="primary">Играть ещё</button>
+<button id="btn-menu" class="ghost">В меню</button>
+</div>
+</div>
+</section>
+</div>
+
+
+<script src="game.js"></script>
+</body>
+</html>
