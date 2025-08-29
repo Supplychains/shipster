@@ -1,56 +1,194 @@
 <!DOCTYPE html>
-<button id="btn-pause" class="ghost">Пауза</button>
-</div>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ship Tetris — Фрахтовый Тетрис</title>
 
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; background:#0b1520; color:#e8f0f7; }
+    #app { max-width:1100px; margin:0 auto; padding:16px; }
+    .topbar { display:flex; align-items:baseline; gap:16px; }
+    .topbar h1 { margin:8px 0 16px; font-weight:800; }
+    .screen { display:none; }
+    .screen.active { display:block; }
+    .card { background:#102033; border:1px solid #1e3350; border-radius:16px; padding:16px; box-shadow:0 8px 32px rgba(0,0,0,.25); }
+    .card h2,.card h3{ margin:8px 0 12px; font-weight:700; }
+    .card.mini{ padding:12px; border-radius:12px; }
+    .row{ display:flex; align-items:center; gap:12px; margin:10px 0; }
+    select,button{ font:inherit; }
+    select{ background:#0f1d2d; color:#e8f0f7; border:1px solid #274365; border-radius:10px; padding:8px 12px; }
+    button{ cursor:pointer; border-radius:12px; padding:10px 16px; border:1px solid transparent; }
+    button.primary{ background:#2b8a3e; color:#fff; border-color:#2b8a3e; }
+    button.primary:hover{ filter:brightness(1.05); }
+    button.ghost{ background:transparent; color:#e8f0f7; border-color:#274365; }
+    button.ghost:hover{ background:#0f1d2d; }
+    .hint{ opacity:.85; margin:10px 0 16px; }
+    .hud{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:12px; }
+    .hud .hud-item{ background:#0f1d2d; border:1px solid #1e3350; border-radius:10px; padding:8px 10px; }
+    .hud .label{ opacity:.8; margin-right:6px; }
+    .playfield-wrap{ display:grid; grid-template-columns:auto 280px; gap:16px; align-items:start; }
+    canvas#board{ background:#07101a; border:2px solid #1e3350; border-radius:12px; display:block; max-width:100%; height:auto; }
+    .sidebar{ display:grid; gap:12px; }
+    .warnings{ min-height:56px; color:#ffd166; }
+    .keys{ margin:0; padding-left:18px; opacity:.85; }
+    .result-grid{ display:grid; grid-template-columns:repeat(2, minmax(180px, 1fr)); gap:10px; margin:8px 0 16px; }
+    .buttons{ display:flex; gap:10px; flex-wrap:wrap; }
+    @media (max-width: 900px){ .playfield-wrap{ grid-template-columns:1fr; } .sidebar{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width: 560px){ .topbar h1{ font-size:20px; } .card{ padding:12px; } .row{ flex-wrap:wrap; } .sidebar{ grid-template-columns:1fr; } }
+  </style>
 
-<div class="playfield-wrap">
-<canvas id="board" width="300" height="480" aria-label="Трюм судна"></canvas>
-<div class="sidebar">
-<div class="card mini">
-<h3>Следующий груз</h3>
-<canvas id="next" width="120" height="120"></canvas>
-<div class="meta">
-<div>Вес: <span id="meta-weight">—</span> т</div>
-<div>Доход: $<span id="meta-revenue">—</span></div>
-</div>
-</div>
-<div class="card mini">
-<h3>Предупреждения</h3>
-<div id="warnings" class="warnings"></div>
-</div>
-<div class="card mini">
-<h3>Управление</h3>
-<ul class="keys">
-<li>← / → — двигать</li>
-<li>↓ — быстрее</li>
-<li>R / ↑ — вращать</li>
-<li>Пробел — уронить</li>
-<li>P — пауза</li>
-</ul>
-</div>
-</div>
-</div>
-</section>
+  <!-- (не обязательно) отключить Jekyll-процессинг, если потребуется: добавь в корень пустой файл .nojekyll -->
+</head>
+<body>
+  <noscript><div style="padding:12px; background:#8b0000; color:#fff">Включите JavaScript, чтобы играть.</div></noscript>
 
+  <div id="app">
+    <header class="topbar"><h1>Ship Tetris — Фрахтовый Тетрис</h1></header>
 
-<!-- Экран результата -->
-<section id="screen-result" class="screen">
-<div class="card">
-<h2>Итоги рейса</h2>
-<div class="result-grid">
-<div><span class="label">Размер судна:</span> <span id="res-size"></span></div>
-<div><span class="label">Дедвейт:</span> <span id="res-dwt"></span> т</div>
-<div><span class="label">Факт. вес:</span> <span id="res-weight"></span> т</div>
-<div><span class="label">Доход:</span> $<span id="res-revenue"></span></div>
-<div><span class="label">Заполнение трюма:</span> <span id="res-fill"></span>%</div>
-<div><span class="label">Эффективность:</span> <span id="res-eff"></span></div>
-</div>
-<div class="buttons">
-<button id="btn-restart" class="primary">Играть ещё</button>
-<button id="btn-menu" class="ghost">В меню</button>
-</div>
-</div>
-</section>
-</div>
+    <section id="screen-menu" class="screen active">
+      <div class="card">
+        <h2>Новая загрузка судна</h2>
+        <div class="row">
+          <label>Размер судна:</label>
+          <select id="ship-size">
+            <option value="small">Малое (8×14, 8 000 т)</option>
+            <option value="medium" selected>Среднее (10×16, 20 000 т)</option>
+            <option value="large">Крупное (12×18, 35 000 т)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Длительность рейса:</label>
+          <select id="game-duration">
+            <option value="90">90 сек</option>
+            <option value="120" selected>120 сек</option>
+            <option value="180">180 сек</option>
+          </select>
+        </div>
+        <div class="hint">Управление: ← → — движение, ↓ — ускорить, R/↑ — вращать, Пробел — уронить.</div>
+        <button id="btn-start" class="primary">Играть</button>
+      </div>
+    </section>
+
+    <section id="screen-game" class="screen">
+      <div class="hud">
+        <div class="hud-item"><span class="label">Судно:</span> <span id="hud-size"></span></div>
+        <div class="hud-item"><span class="label">Дедвейт:</span> <span id="hud-dwt"></span> т</div>
+        <div class="hud-item"><span class="label">Вес:</span> <span id="hud-weight">0</span> т</div>
+        <div class="hud-item"><span class="label">Доход:</span> $<span id="hud-revenue">0</span></div>
+        <div class="hud-item"><span class="label">Заполнение:</span> <span id="hud-fill">0</span>%</div>
+        <div class="hud-item"><span class="label">Время:</span> <span id="hud-time">00:00</span></div>
+        <button id="btn-pause" class="ghost">Пауза</button>
+      </div>
+      <div class="playfield-wrap">
+        <canvas id="board" width="300" height="480" aria-label="Трюм судна"></canvas>
+        <div class="sidebar">
+          <div class="card mini">
+            <h3>Следующий груз</h3>
+            <canvas id="next" width="120" height="120"></canvas>
+            <div class="meta">
+              <div>Вес: <span id="meta-weight">—</span> т</div>
+              <div>Доход: $<span id="meta-revenue">—</span></div>
+            </div>
+          </div>
+          <div class="card mini"><h3>Предупреждения</h3><div id="warnings" class="warnings"></div></div>
+          <div class="card mini">
+            <h3>Управление</h3>
+            <ul class="keys">
+              <li>← / → — двигать</li>
+              <li>↓ — быстрее</li>
+              <li>R / ↑ — вращать</li>
+              <li>Пробел — уронить</li>
+              <li>P — пауза</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-result" class="screen">
+      <div class="card">
+        <h2>Итоги рейса</h2>
+        <div class="result-grid">
+          <div><span class="label">Размер судна:</span> <span id="res-size"></span></div>
+          <div><span class="label">Дедвейт:</span> <span id="res-dwt"></span> т</div>
+          <div><span class="label">Факт. вес:</span> <span id="res-weight"></span> т</div>
+          <div><span class="label">Доход:</span> $<span id="res-revenue"></span></div>
+          <div><span class="label">Заполнение трюма:</span> <span id="res-fill"></span>%</div>
+          <div><span class="label">Эффективность:</span> <span id="res-eff"></span></div>
+        </div>
+        <div class="buttons">
+          <button id="btn-restart" class="primary">Играть ещё</button>
+          <button id="btn-menu" class="ghost">В меню</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function(){
+      const $ = (s)=>document.querySelector(s);
+      const on=(el,ev,fn)=>el&&el.addEventListener(ev,fn);
+      const fmt=(t)=>{t=Math.max(0,Math.floor(t));const m=String(Math.floor(t/60)).padStart(2,'0');const s=String(t%60).padStart(2,'0');return `${m}:${s}`};
+      const SHIPS={small:{w:8,h:14,dwt:8000,label:'Малое 8×14'},medium:{w:10,h:16,dwt:20000,label:'Среднее 10×16'},large:{w:12,h:18,dwt:35000,label:'Крупное 12×18'}};
+      const SHAPES=[
+        {name:'Контейнер',m:[[1,1],[1,1]],wt:4,rev:9000,color:'#37a2ff'},
+        {name:'Уголь',m:[[1,1,1]],wt:3,rev:7000,color:'#a9a9a9'},
+        {name:'Зерно',m:[[1,1,1,1]],wt:5,rev:9000,color:'#ffd166'},
+        {name:'Оборуд.',m:[[1,1,1],[1,0,0]],wt:6,rev:14000,color:'#8be28b'},
+        {name:'Авто',m:[[0,1,0],[1,1,1]],wt:6,rev:15000,color:'#ff6b6b'},
+        {name:'Z',m:[[1,1,0],[0,1,1]],wt:6,rev:15000,color:'#c792ea'},
+        {name:'S',m:[[0,1,1],[1,1,0]],wt:6,rev:15000,color:'#eab308'}];
+      const clone=(m)=>m.map(r=>r.slice());
+      const rot=(m)=>{const h=m.length,w=m[0].length,res=Array.from({length:w},()=>Array(h).fill(0));for(let y=0;y<h;y++)for(let x=0;x<w;x++)res[x][h-1-y]=m[y][x];return res;};
+
+      const board=$('#board'), next=$('#next');
+      const bctx=board.getContext('2d');
+      const nctx=next.getContext('2d');
+
+      const scrMenu=$('#screen-menu'), scrGame=$('#screen-game'), scrResult=$('#screen-result');
+      const hudSize=$('#hud-size'), hudDwt=$('#hud-dwt'), hudWeight=$('#hud-weight'), hudRevenue=$('#hud-revenue'), hudFill=$('#hud-fill'), hudTime=$('#hud-time');
+      const metaWeight=$('#meta-weight'), metaRevenue=$('#meta-revenue'), warningsBox=$('#warnings');
+      const shipSizeSel=$('#ship-size'), durationSel=$('#game-duration');
+      const btnStart=$('#btn-start'), btnPause=$('#btn-pause'), btnRestart=$('#btn-restart'), btnMenu=$('#btn-menu');
+
+      const st={gridW:10,gridH:16,cell:30,board:[],dwt:20000,curWeight:0,revenue:0,running:false,paused:false,over:false,durationSec:120,timeLeft:120,lastTick:0,fallInterval:650,fallAcc:70,piece:null,nextPiece:null,px:0,py:0};
+
+      const setScreen=(s)=>{[scrMenu,scrGame,scrResult].forEach(x=>x.classList.remove('active'));s.classList.add('active');};
+      const initBoard=(w,h)=>{st.gridW=w;st.gridH=h;board.width=w*st.cell;board.height=h*st.cell;st.board=Array.from({length:h},()=>Array(w).fill(0));};
+      const pick=()=>{const b=SHAPES[(Math.random()*SHAPES.length)|0];return {name:b.name,m:clone(b.m),wt:b.wt,rev:b.rev,color:b.color};};
+
+      function spawn(){st.piece=st.nextPiece||pick();st.nextPiece=pick();st.px=Math.floor((st.gridW-st.piece.m[0].length)/2);st.py=-st.piece.m.length;updNext();if(collides(st.px,st.py,st.piece.m)) over();}
+      const collides=(px,py,m)=>{for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=px+x,gy=py+y;if(gx<0||gx>=st.gridW||gy>=st.gridH)return true;if(gy>=0&&st.board[gy][gx])return true;}return false;};
+
+      function lock(){const m=st.piece.m;for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=st.px+x,gy=st.py+y;if(gy>=0)st.board[gy][gx]={color:st.piece.color};}const nw=st.curWeight+st.piece.wt;if(nw>st.dwt){for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=st.px+x,gy=st.py+y;if(gy>=0)st.board[gy][gx]=0;}warn(`Перегруз! Дедвейт ${st.dwt} т. Текущий вес: ${st.curWeight} т. Груз ${st.piece.wt} т не принят.`);return;}st.curWeight=nw;st.revenue+=st.piece.rev;}
+      const warn=(m)=>{if(warningsBox)warningsBox.textContent=m;};
+      const clr=()=>{if(warningsBox)warningsBox.textContent='';};
+      const filled=()=>{let c=0;for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++)if(st.board[y][x])c++;return c;};
+      function hud(){hudWeight.textContent=st.curWeight;hudRevenue.textContent=st.revenue;const f=Math.round(100*filled()/(st.gridW*st.gridH));hudFill.textContent=f;hudTime.textContent=fmt(st.timeLeft);}
+      function cell(ctx,x,y,c){const s=st.cell;ctx.fillStyle=c;ctx.fillRect(x*s,y*s,s,s);ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=2;ctx.strokeRect(x*s+1,y*s+1,s-2,s-2);}
+      function draw(){bctx.clearRect(0,0,board.width,board.height);for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){bctx.fillStyle=(x%2===0&&y%2===0)?'#0b1b2a':'#091621';bctx.fillRect(x*st.cell,y*st.cell,st.cell,st.cell);bctx.strokeStyle='#0f2a45';bctx.strokeRect(x*st.cell,y*st.cell,st.cell,st.cell);}for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){const c=st.board[y][x];if(c)cell(bctx,x,y,c.color);}if(st.piece){const m=st.piece.m;for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=st.px+x,gy=st.py+y;if(gy>=0)cell(bctx,gx,gy,st.piece.color);}}}
+      function updNext(){nctx.clearRect(0,0,next.width,next.height);if(!st.nextPiece){return;}if($('#meta-weight')) $('#meta-weight').textContent=st.nextPiece.wt; if($('#meta-revenue')) $('#meta-revenue').textContent=st.nextPiece.rev;const m=st.nextPiece.m,cs=20,w=m[0].length*cs,h=m.length*cs,ox=(next.width-w)/2,oy=(next.height-h)/2;for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;nctx.fillStyle=st.nextPiece.color;nctx.fillRect(ox+x*cs,oy+y*cs,cs,cs);nctx.strokeStyle='rgba(0,0,0,.35)';nctx.lineWidth=2;nctx.strokeRect(ox+x*cs+1,oy+y*cs+1,cs-2,cs-2);}}
+
+      function loop(ts){if(!st.running)return;if(st.paused){requestAnimationFrame(loop);return;}if(!st.lastTick)st.lastTick=ts;const dt=ts-st.lastTick;st.timeLeft-=dt/1000;if(st.timeLeft<=0){over();return;}const iv=keys.has('ArrowDown')?st.fallAcc:st.fallInterval;if(dt>=iv){st.lastTick=ts;fall();}hud();draw();requestAnimationFrame(loop);}
+      function fall(){if(!st.piece)return;if(!collides(st.px,st.py+1,st.piece.m))st.py++;else{lock();clr();spawn();}}
+      function drop(){while(!collides(st.px,st.py+1,st.piece.m))st.py++;lock();spawn();}
+      function move(dx){if(!st.piece)return;const nx=st.px+dx;if(!collides(nx,st.py,st.piece.m))st.px=nx;}
+      function rotate(){if(!st.piece)return;const r=rot(st.piece.m);if(!collides(st.px,st.py,r))st.piece.m=r;else if(!collides(st.px-1,st.py,r)){st.px-=1;st.piece.m=r;}else if(!collides(st.px+1,st.py,r)){st.px+=1;st.piece.m=r;}}
+
+      const keys=new Set();
+      on(window,'keydown',(e)=>{if(!st.running)return;keys.add(e.key);if(e.key==='ArrowLeft'){e.preventDefault();move(-1);}if(e.key==='ArrowRight'){e.preventDefault();move(1);}if(e.key==='ArrowUp'||e.key==='r'||e.key==='R'){e.preventDefault();rotate();}if(e.key===' '){e.preventDefault();drop();}if(e.key==='p'||e.key==='P'){pause();}});
+      on(window,'keyup',(e)=>keys.delete(e.key));
+
+      function pause(){if(!st.running)return;st.paused=!st.paused; if(btnPause) btnPause.textContent=st.paused?'Продолжить':'Пауза';}
+      function start(){const ship=SHIPS[shipSizeSel.value];const dur=Number(durationSel.value);initBoard(ship.w,ship.h);st.dwt=ship.dwt;st.curWeight=0;st.revenue=0;st.over=false;st.running=true;st.paused=false;st.durationSec=dur;st.timeLeft=dur;st.lastTick=0;hudSize.textContent=ship.label;hudDwt.textContent=ship.dwt;$('#res-size').textContent=ship.label;$('#res-dwt').textContent=ship.dwt;clr();st.nextPiece=pick();spawn();setScreen(scrGame); if(btnPause) btnPause.textContent='Пауза'; requestAnimationFrame(loop);}
+      function over(){st.running=false;st.over=true;$('#res-weight').textContent=st.curWeight;$('#res-revenue').textContent=st.revenue;const f=Math.round(100*filled()/(st.gridW*st.gridH));$('#res-fill').textContent=f;const eff=((st.revenue/Math.max(1,st.dwt))*(f/100)).toFixed(3);$('#res-eff').textContent=eff;setScreen(scrResult);}
+
+      on(btnStart,'click',start); on(btnPause,'click',pause); on(btnRestart,'click',start); on(btnMenu,'click',()=>setScreen(scrMenu));
+      console.log('Ship Tetris ready');
+    })();
+  </script>
 </body>
 </html>
