@@ -1,77 +1,72 @@
 // Версия с надёжной инициализацией: всё навешивается ПОСЛЕ загрузки DOM
+(function(){
+const $ = (sel) => document.querySelector(sel);
+const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
+const fmtTime = (sec) => { sec=Math.max(0,Math.floor(sec)); const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(sec%60).padStart(2,'0'); return `${m}:${s}`; };
+
+
+const SHIPS = {
+small: { w: 8, h: 14, dwt: 8000, label: 'Малое 8×14' },
+medium: { w: 10, h: 16, dwt: 20000, label: 'Среднее 10×16' },
+large: { w: 12, h: 18, dwt: 35000, label: 'Крупное 12×18' },
+};
+
+
+const SHAPES = [
+{ name: 'Контейнер', m: [[1,1],[1,1]], wt: 4, rev: 9000, color: '#37a2ff' },
+{ name: 'Уголь', m: [[1,1,1]], wt: 3, rev: 7000, color: '#a9a9a9' },
+{ name: 'Зерно', m: [[1,1,1,1]], wt: 5, rev: 9000, color: '#ffd166' },
+{ name: 'Оборуд.', m: [[1,1,1],[1,0,0]], wt: 6, rev: 14000, color: '#8be28b' },
+{ name: 'Авто', m: [[0,1,0],[1,1,1]], wt: 6, rev: 15000, color: '#ff6b6b' },
+{ name: 'Z', m: [[1,1,0],[0,1,1]], wt: 6, rev: 15000, color: '#c792ea' },
+{ name: 'S', m: [[0,1,1],[1,1,0]], wt: 6, rev: 15000, color: '#eab308' },
+];
+const cloneM = (m)=>m.map(r=>r.slice());
+const rotM = (m)=>{ const h=m.length,w=m[0].length,res=Array.from({length:w},()=>Array(h).fill(0)); for(let y=0;y<h;y++) for(let x=0;x<w;x++) res[x][h-1-y]=m[y][x]; return res; };
+
+
+function init(){
+// DOM-элементы запрашиваем только после загрузки
+const board = $('#board');
+const next = $('#next');
+const bctx = board.getContext('2d');
+const nctx = next.getContext('2d');
+
+
+const scrMenu=$('#screen-menu'), scrGame=$('#screen-game'), scrResult=$('#screen-result');
+const hudSize=$('#hud-size'), hudDwt=$('#hud-dwt'), hudWeight=$('#hud-weight'), hudRevenue=$('#hud-revenue'), hudFill=$('#hud-fill'), hudTime=$('#hud-time');
+const metaWeight=$('#meta-weight'), metaRevenue=$('#meta-revenue'), warningsBox=$('#warnings');
+const shipSizeSel=$('#ship-size'), durationSel=$('#game-duration');
+const btnStart=$('#btn-start'), btnPause=$('#btn-pause'), btnRestart=$('#btn-restart'), btnMenu=$('#btn-menu');
+
+
+// Если чего-то нет — выведем подсказку и не свалимся с ошибкой
+if(!board || !bctx){ console.error('Canvas #board не найден или не поддерживается'); return; }
+
+
+const st = {
+gridW: 10, gridH: 16, cell: 30, board: [],
+dwt: 20000, curWeight: 0, revenue: 0,
+running:false, paused:false, over:false,
+durationSec:120, timeLeft:120, lastTick:0,
+fallInterval:650, fallAcc:70,
+piece:null, nextPiece:null, px:0, py:0,
+};
+
+
+const setScreen=(s)=>{ [scrMenu,scrGame,scrResult].forEach(x=>x.classList.remove('active')); s.classList.add('active'); };
+const initBoard=(w,h)=>{ st.gridW=w; st.gridH=h; board.width=w*st.cell; board.height=h*st.cell; st.board=Array.from({length:h},()=>Array(w).fill(0)); };
+const pickPiece=()=>{ const b=SHAPES[(Math.random()*SHAPES.length)|0]; return {name:b.name,m:cloneM(b.m),wt:b.wt,rev:b.rev,color:b.color}; };
+
+
+function spawn(){ st.piece = st.nextPiece || pickPiece(); st.nextPiece = pickPiece(); st.px = Math.floor((st.gridW - st.piece.m[0].length)/2); st.py = -st.piece.m.length; updNext(); if (collides(st.px, st.py, st.piece.m)) gameOver(); }
+
+
+const collides=(px,py,m)=>{ for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=px+x, gy=py+y; if(gx<0||gx>=st.gridW||gy>=st.gridH) return true; if(gy>=0 && st.board[gy][gx]) return true; } return false; };
+
+
 function lockPiece(){
 const m=st.piece.m; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]={color:st.piece.color}; }
 const newW = st.curWeight + st.piece.wt;
 if(newW>st.dwt){ for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]=0; } warn(`Перегруз! Дедвейт ${st.dwt} т. Текущий вес: ${st.curWeight} т. Груз ${st.piece.wt} т не принят.`); return; }
-st.curWeight=newW; st.revenue+=st.piece.rev;
-}
-
-
-const warn=(msg)=>{ warningsBox && (warningsBox.textContent=msg); };
-const clrWarn=()=>{ warningsBox && (warningsBox.textContent=''); };
-
-
-function updHUD(){ hudWeight.textContent=st.curWeight; hudRevenue.textContent=st.revenue; const fill=Math.round(100*filledCells()/(st.gridW*st.gridH)); hudFill.textContent=fill; hudTime.textContent=fmtTime(st.timeLeft); }
-const filledCells=()=>{ let c=0; for(let y=0;y<st.gridH;y++) for(let x=0;x<st.gridW;x++) if(st.board[y][x]) c++; return c; };
-
-
-function drawCell(ctx,x,y,color){ const s=st.cell; ctx.fillStyle=color; ctx.fillRect(x*s,y*s,s,s); ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=2; ctx.strokeRect(x*s+1,y*s+1,s-2,s-2); }
-
-
-function render(){
-bctx.clearRect(0,0,board.width,board.height);
-for(let y=0;y<st.gridH;y++) for(let x=0;x<st.gridW;x++){ bctx.fillStyle=(x%2===0&&y%2===0)?'#0b1b2a':'#091621'; bctx.fillRect(x*st.cell, y*st.cell, st.cell, st.cell); bctx.strokeStyle='#0f2a45'; bctx.strokeRect(x*st.cell, y*st.cell, st.cell, st.cell); }
-for(let y=0;y<st.gridH;y++) for(let x=0;x<st.gridW;x++){ const cell=st.board[y][x]; if(cell) drawCell(bctx,x,y,cell.color); }
-if(st.piece){ const m=st.piece.m; for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) drawCell(bctx,gx,gy,st.piece.color); } }
-}
-
-
-function updNext(){ nctx.clearRect(0,0,next.width,next.height); if(!st.nextPiece){ if(metaWeight) metaWeight.textContent='—'; if(metaRevenue) metaRevenue.textContent='—'; return; } if(metaWeight) metaWeight.textContent=st.nextPiece.wt; if(metaRevenue) metaRevenue.textContent=st.nextPiece.rev; const m=st.nextPiece.m, cell=20, w=m[0].length*cell, h=m.length*cell, ox=(next.width-w)/2, oy=(next.height-h)/2; for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; nctx.fillStyle=st.nextPiece.color; nctx.fillRect(ox+x*cell,oy+y*cell,cell,cell); nctx.strokeStyle='rgba(0,0,0,.35)'; nctx.lineWidth=2; nctx.strokeRect(ox+x*cell+1,oy+y*cell+1,cell-2,cell-2); } }
-
-
-function loop(ts){ if(!st.running) return; if(st.paused){ requestAnimationFrame(loop); return; } if(!st.lastTick) st.lastTick=ts; const dt=ts-st.lastTick; st.timeLeft-=dt/1000; if(st.timeLeft<=0){ gameOver(); return; } const interval = keyDown.has('ArrowDown') ? st.fallAcc : st.fallInterval; if(dt>=interval){ st.lastTick=ts; tryFall(); } updHUD(); render(); requestAnimationFrame(loop); }
-
-
-function tryFall(){ if(!st.piece) return; if(!collides(st.px, st.py+1, st.piece.m)) st.py++; else { lockPiece(); clrWarn(); spawn(); } }
-function hardDrop(){ while(!collides(st.px, st.py+1, st.piece.m)) st.py++; lockPiece(); spawn(); }
-function move(dx){ if(!st.piece) return; const nx=st.px+dx; if(!collides(nx, st.py, st.piece.m)) st.px=nx; }
-function rotate(){ if(!st.piece) return; const r=rotM(st.piece.m); if(!collides(st.px, st.py, r)) st.piece.m=r; else if(!collides(st.px-1, st.py, r)){ st.px-=1; st.piece.m=r; } else if(!collides(st.px+1, st.py, r)){ st.px+=1; st.piece.m=r; } }
-
-
-const keyDown=new Set();
-on(window,'keydown',(e)=>{ if(!st.running) return; keyDown.add(e.key); if(e.key==='ArrowLeft'){ e.preventDefault(); move(-1);} if(e.key==='ArrowRight'){ e.preventDefault(); move(1);} if(e.key==='ArrowUp'||e.key==='r'||e.key==='R'){ e.preventDefault(); rotate(); } if(e.key===' '){ e.preventDefault(); hardDrop(); } if(e.key==='p'||e.key==='P'){ togglePause(); } });
-on(window,'keyup',(e)=> keyDown.delete(e.key));
-
-
-function togglePause(){ if(!st.running) return; st.paused=!st.paused; if(btnPause) btnPause.textContent = st.paused? 'Продолжить' : 'Пауза'; }
-
-
-function startGame(){
-const ship = SHIPS[shipSizeSel.value]; const duration=Number(durationSel.value);
-initBoard(ship.w, ship.h);
-st.dwt=ship.dwt; st.curWeight=0; st.revenue=0; st.over=false; st.running=true; st.paused=false;
-st.durationSec=duration; st.timeLeft=duration; st.lastTick=0;
-hudSize.textContent=ship.label; hudDwt.textContent=ship.dwt; $('#res-size').textContent=ship.label; $('#res-dwt').textContent=ship.dwt;
-clrWarn(); st.nextPiece=pickPiece(); spawn(); setScreen(scrGame); if(btnPause) btnPause.textContent='Пауза'; requestAnimationFrame(loop);
-}
-
-
-function gameOver(){ st.running=false; st.over=true; $('#res-weight').textContent=st.curWeight; $('#res-revenue').textContent=st.revenue; const fill=Math.round(100*filledCells()/(st.gridW*st.gridH)); $('#res-fill').textContent=fill; const eff=((st.revenue/Math.max(1,st.dwt))*(fill/100)).toFixed(3); $('#res-eff').textContent=eff; setScreen(scrResult); }
-
-
-on(btnStart,'click',startGame);
-on(btnPause,'click',togglePause);
-on(btnRestart,'click',startGame);
-on(btnMenu,'click',()=>setScreen(scrMenu));
-
-
-console.log('Ship Tetris — инициализация завершена');
-}
-
-
-if (document.readyState === 'loading') {
-document.addEventListener('DOMContentLoaded', init);
-} else {
-init();
-}
 })();
