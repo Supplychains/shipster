@@ -1,38 +1,4 @@
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ship Tetris — Фрахтовый Тетрис</title>
-<link rel="stylesheet" href="./style.css" />
-</head>
-<body>
-<div id="app">
-<header class="topbar">
-<h1>🚢 Ship Tetris — Фрахтовый Тетрис</h1>
-</header>
-
-
-<!-- Экран меню -->
-<section id="screen-menu" class="screen active">
-<div class="card">
-<h2>Новая загрузка судна</h2>
-<div class="row">
-<label>Размер судна:</label>
-<select id="ship-size">
-<option value="small">Малое (8×14, 8 000 т)</option>
-<option value="medium" selected>Среднее (10×16, 20 000 т)</option>
-<option value="large">Крупное (12×18, 35 000 т)</option>
-</select>
-</div>
-<div class="row">
-<label>Длительность рейса:</label>
-<select id="game-duration">
-<option value="90">90 сек</option>
-<option value="120" selected>120 сек</option>
-<option value="180">180 сек</option>
-</select>
-</div>
 <div class="hint">Управление: ← → — движение, ↓ — ускорить, R/↑ — вращать, Пробел — уронить.</div>
 <button id="btn-start" class="primary">Играть</button>
 </div>
@@ -63,4 +29,46 @@
 <div>Доход: $<span id="meta-revenue">—</span></div>
 </div>
 </div>
+<div class="card mini">
+<h3>Предупреждения</h3>
+<div id="warnings" class="warnings"></div>
+</div>
+<div class="card mini">
+<h3>Управление</h3>
+<ul class="keys">
+<li>← / → — двигать</li>
+<li>↓ — быстрее</li>
+<li>R / ↑ — вращать</li>
+<li>Пробел — уронить</li>
+<li>P — пауза</li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+
+
+<!-- Экран результата -->
+<section id="screen-result" class="screen">
+<div class="card">
+<h2>Итоги рейса</h2>
+<div class="result-grid">
+<div><span class="label">Размер судна:</span> <span id="res-size"></span></div>
+<div><span class="label">Дедвейт:</span> <span id="res-dwt"></span> т</div>
+<div><span class="label">Факт. вес:</span> <span id="res-weight"></span> т</div>
+<div><span class="label">Доход:</span> $<span id="res-revenue"></span></div>
+<div><span class="label">Заполнение трюма:</span> <span id="res-fill"></span>%</div>
+<div><span class="label">Эффективность:</span> <span id="res-eff"></span></div>
+</div>
+<div class="buttons">
+<button id="btn-restart" class="primary">Играть ещё</button>
+<button id="btn-menu" class="ghost">В меню</button>
+</div>
+</div>
+</section>
+</div>
+
+
+<script src="./game.js" defer></script>
+</body>
 </html>
