@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -223,13 +222,15 @@
     function spawn(){ st.piece = st.nextPiece || makePiece(); st.nextPiece = makePiece(); st.px=Math.floor((st.gridW-st.piece.m[0].length)/2); st.py=-st.piece.m.length; updNext(); if(collides(st.px,st.py,st.piece.m)) over('Трюм сверху заполнен'); }
 
     const collides=(px,py,m)=>{ for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=px+x, gy=py+y; if(gx<0||gx>=st.gridW||gy>=st.gridH) return true; if(gy>=0 && st.board[gy][gx]) return true; } return false; };
+    function topReached(){ return st.board[0] && st.board[0].some(Boolean); }
 
-    function lock(){ const m=st.piece.m; for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]={color:st.piece.color}; } const newW = st.curWeight + st.piece.wt; if(newW>st.dwt){ // откат + предупреждение
+    function lock(){  const m=st.piece.m; for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]={color:st.piece.color}; } const newW = st.curWeight + st.piece.wt; if(newW>st.dwt){ // откат + предупреждение
         for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]=0; }
         warn(`Перегруз! Дедвейт ${st.dwt} т. Текущий вес: ${st.curWeight} т. Груз ${st.piece.wt} т не принят.`);
         return;
       }
       st.curWeight=newW; st.revenue+=st.piece.rev;
+      if(topReached()){ over('Трюм заполнен до верха'); return; }
       if(st.curWeight>=st.dwt){ over('Дедвейт достигнут'); return; }
     }
 
@@ -296,4 +297,4 @@
   </script>
 </body>
 </html>
-```
+
