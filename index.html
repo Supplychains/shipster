@@ -98,7 +98,7 @@
       <div class="playfield-wrap">
         <div class="leftcol">
           <canvas id="board" width="300" height="480" aria-label="Трюм судна"></canvas>
-          <!-- Мобильные кнопки управления прямо под полем -->
+          <!-- Мобильные кнопки управления -->
           <div class="touch-controls" aria-label="Мобильное управление">
             <button id="tc-left"   class="tc-btn" aria-label="Влево">⟵</button>
             <button id="tc-rotate" class="tc-btn" aria-label="Повернуть">⟳</button>
@@ -121,7 +121,7 @@
         </div>
       </div>
 
-      <!-- Панели внизу: сначала Управление, потом Предупреждения -->
+      <!-- Панели внизу -->
       <div class="info-panels">
         <div class="card mini">
           <h3>Управление</h3>
@@ -164,14 +164,23 @@
   <script>
   (function(){
     const $=(s)=>document.querySelector(s); const on=(el,ev,fn,opt)=>el&&el.addEventListener(ev,fn,opt);
-    const fmt=(t)=>{t=Math.max(0,Math.floor(t));const m=String(Math.floor(t/60)).padStart(2,'0');const s=String(t%60).padStart(2,'0');return `${m}:${s}`};
 
-    // Game data
+    // ==== Game data (shapes with revenue multipliers) ====
     const SHIPS={small:{w:8,h:14,dwt:8000,label:'Малое 8×14'},medium:{w:10,h:16,dwt:20000,label:'Среднее 10×16'},large:{w:12,h:18,dwt:35000,label:'Крупное 12×18'}};
-    const SHAPES=[{name:'Контейнер',m:[[1,1],[1,1]],wt:4,rev:9000,color:'#37a2ff'},{name:'Уголь',m:[[1,1,1]],wt:3,rev:7000,color:'#a9a9a9'},{name:'Зерно',m:[[1,1,1,1]],wt:5,rev:9000,color:'#ffd166'},{name:'Оборуд.',m:[[1,1,1],[1,0,0]],wt:6,rev:14000,color:'#8be28b'},{name:'Авто',m:[[0,1,0],[1,1,1]],wt:6,rev:15000,color:'#ff6b6b'},{name:'Z',m:[[1,1,0],[0,1,1]],wt:6,rev:15000,color:'#c792ea'},{name:'S',m:[[0,1,1],[1,1,0]],wt:6,rev:15000,color:'#eab308'}];
-    const clone=(m)=>m.map(r=>r.slice()); const rot=(m)=>{const h=m.length,w=m[0].length,res=Array.from({length:w},()=>Array(h).fill(0));for(let y=0;y<h;y++)for(let x=0;x<w;x++)res[x][h-1-y]=m[y][x];return res;};
+    const SHAPES=[
+      {name:'Контейнер',m:[[1,1],[1,1]],color:'#37a2ff', revMul:1.2},
+      {name:'Уголь',    m:[[1,1,1]],      color:'#a9a9a9', revMul:0.8},
+      {name:'Зерно',    m:[[1,1,1,1]],    color:'#ffd166', revMul:1.0},
+      {name:'Оборуд.',  m:[[1,1,1],[1,0,0]],color:'#8be28b', revMul:1.3},
+      {name:'Авто',     m:[[0,1,0],[1,1,1]],color:'#ff6b6b', revMul:1.4},
+      {name:'Z',        m:[[1,1,0],[0,1,1]],color:'#c792ea', revMul:1.1},
+      {name:'S',        m:[[0,1,1],[1,1,0]],color:'#eab308', revMul:1.1}
+    ];
+    const clone=(m)=>m.map(r=>r.slice());
+    const rot=(m)=>{const h=m.length,w=m[0].length,res=Array.from({length:w},()=>Array(h).fill(0));for(let y=0;y<h;y++)for(let x=0;x<w;x++)res[x][h-1-y]=m[y][x];return res;};
+    const cellsCount=(m)=>m.flat().reduce((a,b)=>a+b,0);
 
-    // DOM
+    // ==== DOM ====
     const board=$('#board'), next=$('#next'); const bctx=board.getContext('2d'); const nctx=next.getContext('2d');
     const scrMenu=$('#screen-menu'), scrGame=$('#screen-game'), scrResult=$('#screen-result');
     const hudSize=$('#hud-size'), hudDwt=$('#hud-dwt'), hudWeight=$('#hud-weight'), hudRevenue=$('#hud-revenue'), hudFill=$('#hud-fill'), hudTime=$('#hud-time');
@@ -179,59 +188,94 @@
     const btnStart=$('#btn-start'), btnPause=$('#btn-pause'), btnRestart=$('#btn-restart'), btnMenu=$('#btn-menu'), btnAudio=$('#btn-audio');
     const tcLeft=$('#tc-left'), tcRight=$('#tc-right'), tcRotate=$('#tc-rotate'), tcDown=$('#tc-down'), tcDrop=$('#tc-drop'), tcJett=$('#tc-jett'), tcPause=$('#tc-pause');
 
-    // Audio (simple melody on start)
+    // ==== Audio (looped background) ====
     let audioCtx=null, masterGain=null, audioEnabled=true;
-    function initAudio(){ if(!audioEnabled) return; if(!audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC){ audioEnabled=false; return; } audioCtx=new AC(); masterGain=audioCtx.createGain(); masterGain.gain.value=0.15; masterGain.connect(audioCtx.destination);} if(audioCtx.state==='suspended') audioCtx.resume(); }
+    const music={tempo:96, timer:null};
+    function initAudio(){ if(!audioEnabled) return; if(!audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC){ audioEnabled=false; return; } audioCtx=new AC(); masterGain=audioCtx.createGain(); masterGain.gain.value=0.16; masterGain.connect(audioCtx.destination);} if(audioCtx.state==='suspended') audioCtx.resume(); }
     function setMasterVolume(v){ if(masterGain&&audioCtx){ masterGain.gain.setValueAtTime(v,audioCtx.currentTime);} }
-    function toggleAudio(){ audioEnabled=!audioEnabled; if(audioEnabled){ initAudio(); setMasterVolume(0.15);} else { setMasterVolume(0.0);} const b=btnAudio; if(b) b.textContent= audioEnabled? 'Звук: 🔊' : 'Звук: 🔇'; }
-    function playStartMelody(){ if(!audioEnabled) return; initAudio(); if(!audioCtx) return; const now=audioCtx.currentTime+0.05; const tempo=110, beat=60/tempo; const notes=[{n:261.63,d:beat*.75},{n:329.63,d:beat*.75},{n:392.00,d:beat*.75},{n:523.25,d:beat*1.0},{n:392.00,d:beat*.75},{n:329.63,d:beat*.75},{n:261.63,d:beat*1.2}]; let t=now; notes.forEach(({n,d})=>{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='triangle'; o.frequency.setValueAtTime(n,t); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.6,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+d); o.connect(g); g.connect(masterGain); o.start(t); o.stop(t+d+0.05); t+=d; }); }
+    function toggleAudio(){ audioEnabled=!audioEnabled; if(audioEnabled){ initAudio(); setMasterVolume(0.16);} else { setMasterVolume(0.0);} if(btnAudio) btnAudio.textContent= audioEnabled? 'Звук: 🔊' : 'Звук: 🔇'; }
+    function toneAt(t,f,d,v=0.35,type='triangle'){ if(!audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type=type; o.frequency.setValueAtTime(f,t); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(v,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+d); o.connect(g); g.connect(masterGain); o.start(t); o.stop(t+d+0.05); }
+    function startMusicLoop(){ if(!audioEnabled) return; initAudio(); if(!audioCtx) return; stopMusicLoop(); const beat=60/music.tempo; const bar=4*beat; const scale=[261.63,293.66,329.63,392.00,523.25]; // C D E G C5
+      function schedule(){ const base=audioCtx.currentTime+0.05; // 1 бар
+        toneAt(base+0*beat, scale[0], beat*0.95, 0.32);
+        toneAt(base+1*beat, scale[2], beat*0.95, 0.28);
+        toneAt(base+2*beat, scale[3], beat*0.95, 0.30);
+        toneAt(base+3*beat, scale[4], beat*1.05, 0.34);
+        // легкая перкуссия (щелчок)
+        toneAt(base+0.5*beat, 1200, 0.03, 0.08, 'square');
+        toneAt(base+1.5*beat, 1200, 0.03, 0.08, 'square');
+        toneAt(base+2.5*beat, 1200, 0.03, 0.08, 'square');
+        toneAt(base+3.5*beat, 1200, 0.03, 0.08, 'square');
+      }
+      schedule();
+      music.timer=setInterval(schedule, bar*1000);
+    }
+    function stopMusicLoop(){ if(music.timer){ clearInterval(music.timer); music.timer=null; } }
 
-    // State
-    const st={gridW:10,gridH:16,cell:30,board:[],dwt:20000,curWeight:0,revenue:0,running:false,paused:false,over:false,durationSec:120,timeLeft:120,lastFall:0,lastClock:0,clockAccum:0,fallInterval:650,fallAcc:70,piece:null,nextPiece:null,px:0,py:0};
+    // ==== State ====
+    const st={gridW:10,gridH:16,cell:30,board:[],dwt:20000,curWeight:0,revenue:0,running:false,paused:false,over:false,durationSec:120,timeLeft:120,lastFall:0,lastClock:0,clockAccum:0,fallInterval:650,fallAcc:70,piece:null,nextPiece:null,px:0,py:0, perCellWeight:1, ratePerTon:2000};
     let SHIP = SHIPS['medium'];
 
     const setScreen=(s)=>{[scrMenu,scrGame,scrResult].forEach(x=>x.classList.remove('active'));s.classList.add('active');};
     const initBoard=(w,h)=>{st.gridW=w;st.gridH=h;board.width=w*st.cell;board.height=h*st.cell;st.board=Array.from({length:h},()=>Array(w).fill(0));};
-    const pick=()=>{const b=SHAPES[(Math.random()*SHAPES.length)|0];return {name:b.name,m:clone(b.m),wt:b.wt,rev:b.rev,color:b.color};};
+    function makePiece(){ const base=SHAPES[(Math.random()*SHAPES.length)|0]; const m=clone(base.m); const cells=cellsCount(m); const wt=Math.max(1, Math.round(cells*st.perCellWeight)); const rev=Math.max(1, Math.round(wt*st.ratePerTon*(base.revMul||1))); return {name:base.name,m,wt,rev,color:base.color}; }
 
-    function spawn(){ st.piece=st.nextPiece||pick(); st.nextPiece=pick(); st.px=Math.floor((st.gridW-st.piece.m[0].length)/2); st.py=-st.piece.m.length; updNext(); if(collides(st.px,st.py,st.piece.m)) over('Трюм сверху заполнен'); }
+    function spawn(){ st.piece = st.nextPiece || makePiece(); st.nextPiece = makePiece(); st.px=Math.floor((st.gridW-st.piece.m[0].length)/2); st.py=-st.piece.m.length; updNext(); if(collides(st.px,st.py,st.piece.m)) over('Трюм сверху заполнен'); }
+
     const collides=(px,py,m)=>{ for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=px+x, gy=py+y; if(gx<0||gx>=st.gridW||gy>=st.gridH) return true; if(gy>=0 && st.board[gy][gx]) return true; } return false; };
 
-    function lock(){ const m=st.piece.m; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]={color:st.piece.color}; } const nw=st.curWeight+st.piece.wt; if(nw>st.dwt){ for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]=0; } warn(`Перегруз! Дедвейт ${st.dwt} т. Текущий вес: ${st.curWeight} т. Груз ${st.piece.wt} т не принят.`); return; } st.curWeight=nw; st.revenue+=st.piece.rev; }
+    function lock(){ const m=st.piece.m; for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]={color:st.piece.color}; } const newW = st.curWeight + st.piece.wt; if(newW>st.dwt){ // откат + предупреждение
+        for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]=0; }
+        warn(`Перегруз! Дедвейт ${st.dwt} т. Текущий вес: ${st.curWeight} т. Груз ${st.piece.wt} т не принят.`);
+        return;
+      }
+      st.curWeight=newW; st.revenue+=st.piece.rev;
+      if(st.curWeight>=st.dwt){ over('Дедвейт достигнут'); return; }
+    }
 
     function warn(m){ const w=$('#warnings'); if(w) w.textContent=m; }
     function clr(){ const w=$('#warnings'); if(w) w.textContent=''; }
-    function flash(m){ warn(m); setTimeout(clr, 1200); }
 
     const filled=()=>{let c=0;for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++)if(st.board[y][x])c++;return c;};
-    function hud(){ $('#hud-size').textContent=SHIP.label; $('#hud-dwt').textContent=st.dwt; $('#hud-weight').textContent=st.curWeight; $('#hud-revenue').textContent=st.revenue; const f=Math.round(100*filled()/(st.gridW*st.gridH)); $('#hud-fill').textContent=f; $('#hud-time').textContent=`${st.timeLeft} сек`; }
+    function hud(){ hudSize.textContent=SHIP.label; hudDwt.textContent=st.dwt; hudWeight.textContent=Math.round(st.curWeight); hudRevenue.textContent=Math.round(st.revenue); const f=Math.round(100*filled()/(st.gridW*st.gridH)); hudFill.textContent=f; hudTime.textContent=`${st.timeLeft} сек`; }
 
     function cell(ctx,x,y,c){const s=st.cell;ctx.fillStyle=c;ctx.fillRect(x*s,y*s,s,s);ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=2;ctx.strokeRect(x*s+1,y*s+1,s-2,s-2);}    
     function draw(){ bctx.clearRect(0,0,board.width,board.height); for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){ bctx.fillStyle=(x%2===0&&y%2===0)?'#0b1b2a':'#091621'; bctx.fillRect(x*st.cell,y*st.cell,st.cell,st.cell); bctx.strokeStyle='#0f2a45'; bctx.strokeRect(x*st.cell,y*st.cell,st.cell,st.cell);} for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){ const c=st.board[y][x]; if(c) cell(bctx,x,y,c.color); } if(st.piece){ const m=st.piece.m; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) cell(bctx,gx,gy,st.piece.color); } } }
 
-    function updNext(){ const metaW=$('#meta-weight'), metaR=$('#meta-revenue'); nctx.clearRect(0,0,next.width,next.height); if(!st.nextPiece){ if(metaW) metaW.textContent='—'; if(metaR) metaR.textContent='—'; return; } if(metaW) metaW.textContent=st.nextPiece.wt; if(metaR) metaR.textContent=st.nextPiece.rev; const m=st.nextPiece.m,cs=20,w=m[0].length*cs,h=m.length*cs,ox=(next.width-w)/2,oy=(next.height-h)/2; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; nctx.fillStyle=st.nextPiece.color; nctx.fillRect(ox+x*cs,oy+y*cs,cs,cs); nctx.strokeStyle='rgba(0,0,0,.35)'; nctx.lineWidth=2; nctx.strokeRect(ox+x*cs+1,oy+y*cs+1,cs-2,cs-2); } }
+    function updNext(){ const metaW=$('#meta-weight'), metaR=$('#meta-revenue'); nctx.clearRect(0,0,next.width,next.height); if(!st.nextPiece){ if(metaW) metaW.textContent='—'; if(metaR) metaR.textContent='—'; return; } if(metaW) metaW.textContent=Math.round(st.nextPiece.wt); if(metaR) metaR.textContent=Math.round(st.nextPiece.rev); const m=st.nextPiece.m,cs=20,w=m[0].length*cs,h=m.length*cs,ox=(next.width-w)/2,oy=(next.height-h)/2; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; nctx.fillStyle=st.nextPiece.color; nctx.fillRect(ox+x*cs,oy+y*cs,cs,cs); nctx.strokeStyle='rgba(0,0,0,.35)'; nctx.lineWidth=2; nctx.strokeRect(ox+x*cs+1,oy+y*cs+1,cs-2,cs-2); } }
 
-    // Main loop: real-time seconds + fall timer
+    // ==== Main loop (real-second clock + gravity) ====
     function loop(ts){ if(!st.running) return; if(st.paused){ requestAnimationFrame(loop); return; } if(!st.lastClock) st.lastClock=ts; if(!st.lastFall) st.lastFall=ts; const dtClock=ts-st.lastClock; st.lastClock=ts; st.clockAccum+=dtClock; if(st.clockAccum>=1000){ const whole=Math.floor(st.clockAccum/1000); st.timeLeft=Math.max(0, st.timeLeft - whole); st.clockAccum-=whole*1000; if(st.timeLeft===0){ over('Время вышло'); return; } } const interval = keys.has('ArrowDown') ? st.fallAcc : st.fallInterval; const dtFall=ts-st.lastFall; if(dtFall>=interval){ st.lastFall=ts; fall(); } hud(); draw(); requestAnimationFrame(loop); }
 
     function fall(){ if(!st.piece) return; if(!collides(st.px,st.py+1,st.piece.m)) st.py++; else { lock(); clr(); spawn(); } }
     function drop(){ while(!collides(st.px,st.py+1,st.piece.m)) st.py++; lock(); clr(); spawn(); }
     function move(dx){ if(!st.piece) return; const nx=st.px+dx; if(!collides(nx,st.py,st.piece.m)) st.px=nx; }
     function rotate(){ if(!st.piece) return; const r=rot(st.piece.m); if(!collides(st.px,st.py,r)) st.piece.m=r; else if(!collides(st.px-1,st.py,r)){ st.px-=1; st.piece.m=r; } else if(!collides(st.px+1,st.py,r)){ st.px+=1; st.piece.m=r; } }
-    function jettison(){ if(!st.running||st.paused||!st.piece) return; st.piece=null; flash('Груз сброшен'); spawn(); }
+    function jettison(){ if(!st.running||st.paused||!st.piece) return; st.piece=null; warn('Груз сброшен'); spawn(); }
 
     const keys=new Set();
     on(window,'keydown',(e)=>{ if(!st.running) return; keys.add(e.key); if(e.key==='ArrowLeft'){e.preventDefault(); move(-1);} if(e.key==='ArrowRight'){e.preventDefault(); move(1);} if(e.key==='ArrowUp'||e.key==='r'||e.key==='R'){e.preventDefault(); rotate();} if(e.key===' '){e.preventDefault(); drop();} if(e.key==='x'||e.key==='X'){ e.preventDefault(); jettison(); } if(e.key==='p'||e.key==='P'){ pause(); } }, {passive:false});
     on(window,'keyup',(e)=> keys.delete(e.key));
 
-    function pause(){ if(!st.running) return; st.paused=!st.paused; const p=$('#btn-pause'); if(p) p.textContent=st.paused?'Продолжить':'Пауза'; }
+    function pause(){ if(!st.running) return; st.paused=!st.paused; const p=$('#btn-pause'); if(p) p.textContent=st.paused?'Продолжить':'Пауза'; if(audioCtx){ st.paused ? audioCtx.suspend() : audioCtx.resume(); } }
 
-    function start(){ SHIP = SHIPS[shipSizeSel.value]; const dur=Number(durationSel.value); initBoard(SHIP.w,SHIP.h); st.dwt=SHIP.dwt; st.curWeight=0; st.revenue=0; st.over=false; st.running=true; st.paused=false; st.durationSec=dur; st.timeLeft=dur; st.lastFall=0; st.lastClock=0; st.clockAccum=0; $('#hud-size').textContent=SHIP.label; $('#hud-dwt').textContent=SHIP.dwt; $('#res-size').textContent=SHIP.label; $('#res-dwt').textContent=SHIP.dwt; clr(); st.nextPiece=pick(); spawn(); setScreen(scrGame); const p=$('#btn-pause'); if(p) p.textContent='Пауза'; playStartMelody(); requestAnimationFrame(loop); }
-    function over(reason){ st.running=false; st.over=true; $('#res-weight').textContent=st.curWeight; $('#res-revenue').textContent=st.revenue; const f=Math.round(100*filled()/(st.gridW*st.gridH)); $('#res-fill').textContent=f; const eff=((st.revenue/Math.max(1,st.dwt))*(f/100)).toFixed(3); $('#res-eff').textContent=eff; if(reason) warn(reason); setScreen(scrResult); }
+    function start(){
+      // выбрать корабль, посчитать вес клетки так, чтобы при 80% заполнения достигался дедвейт
+      SHIP = SHIPS[shipSizeSel.value]; const dur=Number(durationSel.value);
+      initBoard(SHIP.w,SHIP.h); st.dwt=SHIP.dwt; st.curWeight=0; st.revenue=0; st.over=false; st.running=true; st.paused=false; st.durationSec=dur; st.timeLeft=dur; st.lastFall=0; st.lastClock=0; st.clockAccum=0;
+      const totalCells = st.gridW*st.gridH; st.perCellWeight = st.dwt / (totalCells*0.8); // ключевой пункт 80%
+      st.ratePerTon = 2000; // $/тонна
+      hudSize.textContent=SHIP.label; hudDwt.textContent=st.dwt; $('#res-size').textContent=SHIP.label; $('#res-dwt').textContent=SHIP.dwt;
+      clr(); st.nextPiece=makePiece(); spawn(); setScreen(scrGame); if(btnPause) btnPause.textContent='Пауза';
+      startMusicLoop();
+      requestAnimationFrame(loop);
+    }
 
-    on(btnStart,'click',start); on(btnPause,'click',pause); on(btnRestart,'click',start); on(btnMenu,'click',()=>setScreen(scrMenu)); on(btnAudio,'click',(e)=>{ e.preventDefault(); toggleAudio(); });
+    function over(reason){ st.running=false; st.over=true; $('#res-weight').textContent=Math.round(st.curWeight); $('#res-revenue').textContent=Math.round(st.revenue); const f=Math.round(100*filled()/(st.gridW*st.gridH)); $('#res-fill').textContent=f; const eff=((st.revenue/Math.max(1,st.dwt))*(f/100)).toFixed(3); $('#res-eff').textContent=eff; if(reason) warn(reason); setScreen(scrResult); stopMusicLoop(); }
 
-    // Touch controls events
+    on(btnStart,'click',start); on(btnPause,'click',pause); on(btnRestart,'click',start); on(btnMenu,'click',()=>{ setScreen(scrMenu); stopMusicLoop(); }); on(btnAudio,'click',(e)=>{ e.preventDefault(); toggleAudio(); });
+
+    // Touch controls
     const holders=new Map();
     function addHold(el,action,initial=200,repeat=80){ if(!el) return; const start=(ev)=>{ ev.preventDefault(); if(!st.running||st.paused) return; action(); const t1=setTimeout(()=>{ const t2=setInterval(()=>action(),repeat); holders.set(el,{t1:null,t2}); },initial); holders.set(el,{t1,t2:null}); }; const end=()=>{ const h=holders.get(el); if(h){ if(h.t1) clearTimeout(h.t1); if(h.t2) clearInterval(h.t2); holders.delete(el);} }; on(el,'pointerdown',start,{passive:false}); on(el,'pointerup',end); on(el,'pointerleave',end); on(el,'pointercancel',end); }
     addHold(tcLeft, ()=>move(-1));
@@ -242,12 +286,12 @@
     on(tcJett,'pointerdown',(e)=>{ e.preventDefault(); jettison(); }, {passive:false});
     on(tcPause,'pointerdown',(e)=>{ e.preventDefault(); pause(); }, {passive:false});
 
-    // Canvas gestures (tap=rotate, swipe left/right/down)
+    // Canvas gestures
     let touchStart=null;
     on(board,'touchstart',(e)=>{ if(!st.running) return; const t=e.changedTouches[0]; touchStart={x:t.clientX,y:t.clientY,time:performance.now()}; e.preventDefault(); }, {passive:false});
     on(board,'touchend',(e)=>{ if(!st.running) return; const t=e.changedTouches[0]; if(!touchStart) return; const dx=t.clientX-touchStart.x, dy=t.clientY-touchStart.y; const dt=performance.now()-touchStart.time; const ax=Math.abs(dx), ay=Math.abs(dy); if(ax<12 && ay<12 && dt<180){ rotate(); } else if(ax>ay){ if(ax>20){ dx>0 ? move(1) : move(-1); } } else { if(dy>28){ drop(); } } touchStart=null; e.preventDefault(); }, {passive:false});
 
-    console.log('Ship Tetris (mobile one‑file) — controls under board; info moved down');
+    console.log('Ship Tetris — music loops, top collision ends game, weights scaled for 80% fill');
   })();
   </script>
 </body>
