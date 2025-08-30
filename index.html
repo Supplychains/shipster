@@ -31,11 +31,11 @@
     .sidebar{display:grid;gap:12px}
     .warnings{min-height:56px;color:#ffd166}
     .keys{margin:0;padding-left:18px;opacity:.85}
-    .result-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px;margin:8px 0 16px}
+    .result-grid{display:grid;grid-template-columns:repeat(2,minmax(180px, 1fr));gap:10px;margin:8px 0 16px}
     .buttons{display:flex;gap:10px;flex-wrap:wrap}
 
     /* Touch controls */
-    .touch-controls{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:14px 0 6px}
+    .touch-controls{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin:14px 0 6px}
     .tc-btn{background:#0f1d2d;border:1px solid var(--panel-border);border-radius:12px;padding:14px 10px;color:var(--ink);font-weight:800;text-align:center;user-select:none;-webkit-user-select:none;touch-action:none}
     .tc-btn.emph{background:#2b8a3e;border-color:#2b8a3e;color:#fff}
 
@@ -84,13 +84,25 @@
         <div class="hud-item"><span class="label">Вес:</span> <span id="hud-weight">0</span> т</div>
         <div class="hud-item"><span class="label">Доход:</span> $<span id="hud-revenue">0</span></div>
         <div class="hud-item"><span class="label">Заполнение:</span> <span id="hud-fill">0</span>%</div>
-        <div class="hud-item"><span class="label">Время:</span> <span id="hud-time">00:00</span></div>
+        <div class="hud-item"><span class="label">Время:</span> <span id="hud-time">0 сек</span></div>
         <button id="btn-pause" class="ghost">Пауза</button>
       </div>
 
       <div class="playfield-wrap">
         <canvas id="board" width="300" height="480" aria-label="Трюм судна"></canvas>
         <div class="sidebar">
+          <div class="card mini">
+            <h3>Управление</h3>
+            <ul class="keys">
+              <li>← / → — двигать</li>
+              <li>↓ — быстрее</li>
+              <li>R / ↑ — вращать</li>
+              <li>Пробел — уронить</li>
+              <li>P — пауза</li>
+              <li>X — сбросить текущий груз</li>
+            </ul>
+          </div>
+          <div class="card mini"><h3>Предупреждения</h3><div id="warnings" class="warnings"></div></div>
           <div class="card mini">
             <h3>Следующий груз</h3>
             <canvas id="next" width="120" height="120"></canvas>
@@ -99,8 +111,6 @@
               <div>Доход: $<span id="meta-revenue">—</span></div>
             </div>
           </div>
-          $2
-$1
         </div>
       </div>
 
@@ -111,6 +121,7 @@ $1
         <button id="tc-right"  class="tc-btn" aria-label="Вправо">⟶</button>
         <button id="tc-down"   class="tc-btn" aria-label="Ускорить">⬇</button>
         <button id="tc-drop"   class="tc-btn emph" aria-label="Уронить">DROP</button>
+        <button id="tc-jett"   class="tc-btn" aria-label="Сбросить груз">Сброс</button>
         <button id="tc-pause"  class="tc-btn" aria-label="Пауза">⏸</button>
       </div>
     </section>
@@ -125,6 +136,7 @@ $1
           <div><span class="label">Факт. вес:</span> <span id="res-weight"></span> т</div>
           <div><span class="label">Доход:</span> $<span id="res-revenue"></span></div>
           <div><span class="label">Заполнение трюма:</span> <span id="res-fill"></span>%</div>
+          <div><span class="label">Время игры:</span> <span id="res-time"></span> сек</div>
           <div><span class="label">Эффективность:</span> <span id="res-eff"></span></div>
         </div>
         <div class="buttons">
@@ -138,10 +150,19 @@ $1
   <script>
   (function(){
     const $=(s)=>document.querySelector(s); const on=(el,ev,fn,opt)=>el&&el.addEventListener(ev,fn,opt);
-    const fmt=(t)=>{t=Math.max(0,Math.floor(t));const m=String(Math.floor(t/60)).padStart(2,'0');const s=String(t%60).padStart(2,'0');return `${m}:${s}`};
     const SHIPS={small:{w:8,h:14,dwt:8000,label:'Малое 8×14'},medium:{w:10,h:16,dwt:20000,label:'Среднее 10×16'},large:{w:12,h:18,dwt:35000,label:'Крупное 12×18'}};
-    const SHAPES=[{name:'Контейнер',m:[[1,1],[1,1]],wt:4,rev:9000,color:'#37a2ff'},{name:'Уголь',m:[[1,1,1]],wt:3,rev:7000,color:'#a9a9a9'},{name:'Зерно',m:[[1,1,1,1]],wt:5,rev:9000,color:'#ffd166'},{name:'Оборуд.',m:[[1,1,1],[1,0,0]],wt:6,rev:14000,color:'#8be28b'},{name:'Авто',m:[[0,1,0],[1,1,1]],wt:6,rev:15000,color:'#ff6b6b'},{name:'Z',m:[[1,1,0],[0,1,1]],wt:6,rev:15000,color:'#c792ea'},{name:'S',m:[[0,1,1],[1,1,0]],wt:6,rev:15000,color:'#eab308'}];
-    const clone=(m)=>m.map(r=>r.slice()); const rot=(m)=>{const h=m.length,w=m[0].length,res=Array.from({length:w},()=>Array(h).fill(0));for(let y=0;y<h;y++)for(let x=0;x<w;x++)res[x][h-1-y]=m[y][x];return res;};
+    const SHAPES=[
+      {name:'Контейнер',m:[[1,1],[1,1]],wt:4,rev:9000,color:'#37a2ff'},
+      {name:'Уголь',m:[[1,1,1]],wt:3,rev:7000,color:'#a9a9a9'},
+      {name:'Зерно',m:[[1,1,1,1]],wt:5,rev:9000,color:'#ffd166'},
+      {name:'Оборуд.',m:[[1,1,1],[1,0,0]],wt:6,rev:14000,color:'#8be28b'},
+      {name:'Авто',m:[[0,1,0],[1,1,1]],wt:6,rev:15000,color:'#ff6b6b'},
+      {name:'Z',m:[[1,1,0],[0,1,1]],wt:6,rev:15000,color:'#c792ea'},
+      {name:'S',m:[[0,1,1],[1,1,0]],wt:6,rev:15000,color:'#eab308'},
+      {name:'Пентоблок',m:[[1,0,1],[1,1,1]],wt:8,rev:18000,color:'#ffb703'}
+    ];
+    const clone=(m)=>m.map(r=>r.slice());
+    const rot=(m)=>{const h=m.length,w=m[0].length,res=Array.from({length:w},()=>Array(h).fill(0));for(let y=0;y<h;y++)for(let x=0;x<w;x++)res[x][h-1-y]=m[y][x];return res;};
 
     // DOM
     const board=$('#board'), next=$('#next'); const bctx=board.getContext('2d'); const nctx=next.getContext('2d');
@@ -149,72 +170,119 @@ $1
     const hudSize=$('#hud-size'), hudDwt=$('#hud-dwt'), hudWeight=$('#hud-weight'), hudRevenue=$('#hud-revenue'), hudFill=$('#hud-fill'), hudTime=$('#hud-time');
     const shipSizeSel=$('#ship-size'), durationSel=$('#game-duration');
     const btnStart=$('#btn-start'), btnPause=$('#btn-pause'), btnRestart=$('#btn-restart'), btnMenu=$('#btn-menu');
-
-    // Touch buttons
-    const tcLeft=$('#tc-left'), tcRight=$('#tc-right'), tcRotate=$('#tc-rotate'), tcDown=$('#tc-down'), tcDrop=$('#tc-drop'), tcPause=$('#tc-pause');
+    const tcLeft=$('#tc-left'), tcRight=$('#tc-right'), tcRotate=$('#tc-rotate'), tcDown=$('#tc-down'), tcDrop=$('#tc-drop'), tcJett=$('#tc-jett'), tcPause=$('#tc-pause');
 
     // Game state
-    const st={gridW:10,gridH:16,cell:30,board:[],dwt:20000,curWeight:0,revenue:0,running:false,paused:false,over:false,durationSec:120,timeLeft:120,lastTick:0,fallInterval:650,fallAcc:70,piece:null,nextPiece:null,px:0,py:0};
+    const st={
+      gridW:10,gridH:16,cell:30,board:[],
+      dwt:20000,curWeight:0,revenue:0,
+      running:false,paused:false,over:false,
+      durationSec:120,timeLeft:120,
+      // два независимых таймера
+      lastFall:0,lastClock:0,clockAccum:0,
+      fallInterval:650,fallAcc:70,
+      piece:null,nextPiece:null,px:0,py:0
+    };
+    let SHIP = SHIPS['medium'];
 
     const setScreen=(s)=>{[scrMenu,scrGame,scrResult].forEach(x=>x.classList.remove('active'));s.classList.add('active');};
     const initBoard=(w,h)=>{st.gridW=w;st.gridH=h;board.width=w*st.cell;board.height=h*st.cell;st.board=Array.from({length:h},()=>Array(w).fill(0));};
     const pick=()=>{const b=SHAPES[(Math.random()*SHAPES.length)|0];return {name:b.name,m:clone(b.m),wt:b.wt,rev:b.rev,color:b.color};};
 
-    function spawn(){st.piece=st.nextPiece||pick();st.nextPiece=pick();st.px=Math.floor((st.gridW-st.piece.m[0].length)/2);st.py=-st.piece.m.length;updNext();if(collides(st.px,st.py,st.piece.m)) over();}
+    function spawn(){st.piece=st.nextPiece||pick();st.nextPiece=pick();st.px=Math.floor((st.gridW-st.piece.m[0].length)/2);st.py=-st.piece.m.length;updNext();if(collides(st.px,st.py,st.piece.m)) over('Трюм сверху заполнен');}
+
     const collides=(px,py,m)=>{for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=px+x,gy=py+y;if(gx<0||gx>=st.gridW||gy>=st.gridH)return true;if(gy>=0&&st.board[gy][gx])return true;}return false;};
 
-    function lock(){const m=st.piece.m;for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=st.px+x,gy=st.py+y;if(gy>=0)st.board[gy][gx]={color:st.piece.color};}const nw=st.curWeight+st.piece.wt;if(nw>st.dwt){for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=st.px+x,gy=st.py+y;if(gy>=0)st.board[gy][gx]=0;}warn(`Перегруз! Дедвейт ${st.dwt} т. Текущий вес: ${st.curWeight} т. Груз ${st.piece.wt} т не принят.`);return;}st.curWeight=nw;st.revenue+=st.piece.rev;}
-    const warn=(m)=>{const w=$('#warnings'); if(w) w.textContent=m;}; const clr=()=>{const w=$('#warnings'); if(w) w.textContent='';};
+    function lock(){
+      const m=st.piece.m; const cells=m.flat().reduce((a,b)=>a+b,0); const perCellRev=st.piece.rev/Math.max(1,cells);
+      for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){
+        if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) st.board[gy][gx]={color:st.piece.color,val:perCellRev};
+      }
+      st.curWeight+=st.piece.wt; st.revenue+=st.piece.rev;
+      const bonus=checkColorRowBonus(); if(bonus>0){ st.revenue+=bonus; flash(`Цветные линии: +$${Math.round(bonus)}`); }
+      if(st.curWeight>=st.dwt){ over('Дедвейт достигнут'); return; }
+    }
+
+    function checkColorRowBonus(){ let bonus=0; for(let y=0;y<st.gridH;y++){ let rowFull=true,firstColor=null,mono=true,rowValue=0; for(let x=0;x<st.gridW;x++){ const cell=st.board[y][x]; if(!cell){ rowFull=false; break; } rowValue+=cell.val||0; if(firstColor===null) firstColor=cell.color; else if(cell.color!==firstColor) mono=false; } if(rowFull&&mono){ bonus+=rowValue; highlightRow(y); } } return bonus; }
+    function highlightRow(y){ bctx.save(); bctx.globalAlpha=0.25; bctx.fillStyle='#fff'; bctx.fillRect(0,y*st.cell,board.width,st.cell); bctx.restore(); }
+
+    function warn(m){ const w=$('#warnings'); if(w) w.textContent=m; }
+    function flash(m){ warn(m); setTimeout(()=>{ const w=$('#warnings'); if(w) w.textContent=''; }, 1200); }
 
     const filled=()=>{let c=0;for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++)if(st.board[y][x])c++;return c;};
-    function hud(){hudSize.textContent=SHIP.label; hudDwt.textContent=st.dwt; $('#hud-weight').textContent=st.curWeight; $('#hud-revenue').textContent=st.revenue; const f=Math.round(100*filled()/(st.gridW*st.gridH)); $('#hud-fill').textContent=f; $('#hud-time').textContent=fmt(st.timeLeft); }
+    function hud(){ $('#hud-size').textContent=SHIP.label; $('#hud-dwt').textContent=st.dwt; $('#hud-weight').textContent=st.curWeight; $('#hud-revenue').textContent=st.revenue; const f=Math.round(100*filled()/(st.gridW*st.gridH)); $('#hud-fill').textContent=f; $('#hud-time').textContent=`${st.timeLeft} сек`; }
 
-    function cell(ctx,x,y,c){const s=st.cell;ctx.fillStyle=c;ctx.fillRect(x*s,y*s,s,s);ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=2;ctx.strokeRect(x*s+1,y*s+1,s-2,s-2);}
-    function draw(){bctx.clearRect(0,0,board.width,board.height);for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){bctx.fillStyle=(x%2===0&&y%2===0)?'#0b1b2a':'#091621';bctx.fillRect(x*st.cell,y*st.cell,st.cell,st.cell);bctx.strokeStyle='#0f2a45';bctx.strokeRect(x*st.cell,y*st.cell,st.cell,st.cell);}for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){const c=st.board[y][x];if(c)cell(bctx,x,y,c.color);}if(st.piece){const m=st.piece.m;for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;const gx=st.px+x,gy=st.py+y;if(gy>=0)cell(bctx,gx,gy,st.piece.color);}}}
+    function cell(ctx,x,y,c){const s=st.cell;ctx.fillStyle=c;ctx.fillRect(x*s,y*s,s,s);ctx.strokeStyle='rgba(0,0,0,.35)';ctx.lineWidth=2;ctx.strokeRect(x*s+1,y*s+1,s-2,s-2);}    
+    function draw(){ bctx.clearRect(0,0,board.width,board.height); for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){ bctx.fillStyle=(x%2===0&&y%2===0)?'#0b1b2a':'#091621'; bctx.fillRect(x*st.cell,y*st.cell,st.cell,st.cell); bctx.strokeStyle='#0f2a45'; bctx.strokeRect(x*st.cell,y*st.cell,st.cell,st.cell);} for(let y=0;y<st.gridH;y++)for(let x=0;x<st.gridW;x++){ const c=st.board[y][x]; if(c) cell(bctx,x,y,c.color); } if(st.piece){ const m=st.piece.m; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; const gx=st.px+x, gy=st.py+y; if(gy>=0) cell(bctx,gx,gy,st.piece.color); } } }
 
-    function updNext(){const metaW=$('#meta-weight'), metaR=$('#meta-revenue'); nctx.clearRect(0,0,next.width,next.height); if(!st.nextPiece){ if(metaW) metaW.textContent='—'; if(metaR) metaR.textContent='—'; return; } if(metaW) metaW.textContent=st.nextPiece.wt; if(metaR) metaR.textContent=st.nextPiece.rev; const m=st.nextPiece.m,cs=20,w=m[0].length*cs,h=m.length*cs,ox=(next.width-w)/2,oy=(next.height-h)/2; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){if(!m[y][x])continue;nctx.fillStyle=st.nextPiece.color;nctx.fillRect(ox+x*cs,oy+y*cs,cs,cs);nctx.strokeStyle='rgba(0,0,0,.35)';nctx.lineWidth=2;nctx.strokeRect(ox+x*cs+1,oy+y*cs+1,cs-2,cs-2);} }
+    function updNext(){ const metaW=$('#meta-weight'), metaR=$('#meta-revenue'); nctx.clearRect(0,0,next.width,next.height); if(!st.nextPiece){ if(metaW) metaW.textContent='—'; if(metaR) metaR.textContent='—'; return; } if(metaW) metaW.textContent=st.nextPiece.wt; if(metaR) metaR.textContent=st.nextPiece.rev; const m=st.nextPiece.m,cs=20,w=m[0].length*cs,h=m.length*cs,ox=(next.width-w)/2,oy=(next.height-h)/2; for(let y=0;y<m.length;y++)for(let x=0;x<m[0].length;x++){ if(!m[y][x]) continue; nctx.fillStyle=st.nextPiece.color; nctx.fillRect(ox+x*cs,oy+y*cs,cs,cs); nctx.strokeStyle='rgba(0,0,0,.35)'; nctx.lineWidth=2; nctx.strokeRect(ox+x*cs+1,oy+y*cs+1,cs-2,cs-2); } }
 
-    function loop(ts){ if(!st.running) return; if(st.paused){ requestAnimationFrame(loop); return; } if(!st.lastTick) st.lastTick=ts; const dt=ts-st.lastTick; st.timeLeft-=dt/1000; if(st.timeLeft<=0){ over(); return; } const iv=keys.has('ArrowDown')?st.fallAcc:st.fallInterval; if(dt>=iv){ st.lastTick=ts; fall(); } hud(); draw(); requestAnimationFrame(loop); }
-    function fall(){ if(!st.piece) return; if(!collides(st.px,st.py+1,st.piece.m)) st.py++; else { lock(); clr(); spawn(); } }
+    // ===== Главный цикл с «нормальной» секундой =====
+    function loop(ts){
+      if(!st.running) return;
+      if(st.paused){ requestAnimationFrame(loop); return; }
+
+      // Инициализация таймеров
+      if(!st.lastClock) st.lastClock = ts;
+      if(!st.lastFall)  st.lastFall  = ts;
+
+      // 1) Часы игры: накапливаем миллисекунды и вычитаем целые секунды
+      const dtClock = ts - st.lastClock; // мс
+      st.lastClock = ts;
+      st.clockAccum += dtClock;
+      if (st.clockAccum >= 1000) {
+        const whole = Math.floor(st.clockAccum / 1000); // целые секунды
+        st.timeLeft = Math.max(0, st.timeLeft - whole);
+        st.clockAccum -= whole * 1000;
+        if (st.timeLeft === 0) { over('Время вышло'); return; }
+      }
+
+      // 2) Падение фигуры — отдельный интервал
+      const interval = keys.has('ArrowDown') ? st.fallAcc : st.fallInterval;
+      const dtFall = ts - st.lastFall;
+      if (dtFall >= interval) { st.lastFall = ts; fall(); }
+
+      hud();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function fall(){ if(!st.piece) return; if(!collides(st.px,st.py+1,st.piece.m)) st.py++; else { lock(); spawn(); } }
     function drop(){ while(!collides(st.px,st.py+1,st.piece.m)) st.py++; lock(); spawn(); }
     function move(dx){ if(!st.piece) return; const nx=st.px+dx; if(!collides(nx,st.py,st.piece.m)) st.px=nx; }
     function rotate(){ if(!st.piece) return; const r=rot(st.piece.m); if(!collides(st.px,st.py,r)) st.piece.m=r; else if(!collides(st.px-1,st.py,r)){ st.px-=1; st.piece.m=r; } else if(!collides(st.px+1,st.py,r)){ st.px+=1; st.piece.m=r; } }
+    function jettison(){ if(!st.running||st.paused||!st.piece) return; st.piece=null; flash('Груз сброшен'); spawn(); }
 
     const keys=new Set();
-    on(window,'keydown',(e)=>{ if(!st.running) return; keys.add(e.key); if(e.key==='ArrowLeft'){e.preventDefault(); move(-1);} if(e.key==='ArrowRight'){e.preventDefault(); move(1);} if(e.key==='ArrowUp'||e.key==='r'||e.key==='R'){e.preventDefault(); rotate();} if(e.key===' '){e.preventDefault(); drop();} if(e.key==='p'||e.key==='P'){ pause(); } }, {passive:false});
+    on(window,'keydown',(e)=>{ if(!st.running) return; keys.add(e.key); if(e.key==='ArrowLeft'){e.preventDefault(); move(-1);} if(e.key==='ArrowRight'){e.preventDefault(); move(1);} if(e.key==='ArrowUp'||e.key==='r'||e.key==='R'){e.preventDefault(); rotate();} if(e.key===' '){e.preventDefault(); drop();} if(e.key==='x'||e.key==='X'){ e.preventDefault(); jettison(); } if(e.key==='p'||e.key==='P'){ pause(); } }, {passive:false});
     on(window,'keyup',(e)=> keys.delete(e.key));
 
     function pause(){ if(!st.running) return; st.paused=!st.paused; const p=$('#btn-pause'); if(p) p.textContent=st.paused?'Продолжить':'Пауза'; }
 
-    let SHIP = SHIPS[shipSizeSel.value];
-    function start(){ SHIP = SHIPS[shipSizeSel.value]; const dur=Number(durationSel.value); initBoard(SHIP.w,SHIP.h); st.dwt=SHIP.dwt; st.curWeight=0; st.revenue=0; st.over=false; st.running=true; st.paused=false; st.durationSec=dur; st.timeLeft=dur; st.lastTick=0; $('#hud-size').textContent=SHIP.label; $('#hud-dwt').textContent=SHIP.dwt; $('#res-size').textContent=SHIP.label; $('#res-dwt').textContent=SHIP.dwt; clr(); st.nextPiece=pick(); spawn(); setScreen(scrGame); const p=$('#btn-pause'); if(p) p.textContent='Пауза'; requestAnimationFrame(loop); }
-    function over(){ st.running=false; st.over=true; $('#res-weight').textContent=st.curWeight; $('#res-revenue').textContent=st.revenue; const f=Math.round(100*filled()/(st.gridW*st.gridH)); $('#res-fill').textContent=f; const eff=((st.revenue/Math.max(1,st.dwt))*(f/100)).toFixed(3); $('#res-eff').textContent=eff; setScreen(scrResult); }
+    function start(){ SHIP = SHIPS[shipSizeSel.value]; const dur=Number(durationSel.value); initBoard(SHIP.w,SHIP.h); st.dwt=SHIP.dwt; st.curWeight=0; st.revenue=0; st.over=false; st.running=true; st.paused=false; st.durationSec=dur; st.timeLeft=dur; st.lastFall=0; st.lastClock=0; st.clockAccum=0; $('#hud-size').textContent=SHIP.label; $('#hud-dwt').textContent=SHIP.dwt; $('#res-size').textContent=SHIP.label; $('#res-dwt').textContent=SHIP.dwt; $('#res-time').textContent='0'; spawn(); setScreen(scrGame); const p=$('#btn-pause'); if(p) p.textContent='Пауза'; requestAnimationFrame(loop); }
+    function over(reason){ st.running=false; st.over=true; $('#res-weight').textContent=st.curWeight; $('#res-revenue').textContent=st.revenue; const f=Math.round(100*filled()/(st.gridW*st.gridH)); $('#res-fill').textContent=f; $('#res-time').textContent = String(Math.max(0, Math.round(st.durationSec - st.timeLeft))); const eff=((st.revenue/Math.max(1,st.dwt))*(f/100)).toFixed(3); $('#res-eff').textContent=eff; if(reason) warn(reason); setScreen(scrResult); }
 
     on(btnStart,'click',start); on(btnPause,'click',pause); on(btnRestart,'click',start); on(btnMenu,'click',()=>setScreen(scrMenu));
 
-    // ===== Touch controls (tap + hold repeat) =====
+    // Touch controls (tap + hold repeat)
     const holders=new Map();
-    function addHold(el, action, initial=200, repeat=80){
-      if(!el) return;
-      const start=(ev)=>{ ev.preventDefault(); if(!st.running||st.paused) return; action(); const t1=setTimeout(()=>{ const t2=setInterval(()=>action(), repeat); holders.set(el,{t1:null,t2}); }, initial); holders.set(el,{t1,t2:null}); };
-      const end=()=>{ const h=holders.get(el); if(h){ if(h.t1) clearTimeout(h.t1); if(h.t2) clearInterval(h.t2); holders.delete(el);} };
-      on(el,'pointerdown',start,{passive:false}); on(el,'pointerup',end); on(el,'pointerleave',end); on(el,'pointercancel',end);
-    }
+    function addHold(el, action, initial=200, repeat=80){ if(!el) return; const start=(ev)=>{ ev.preventDefault(); if(!st.running||st.paused) return; action(); const t1=setTimeout(()=>{ const t2=setInterval(()=>action(), repeat); holders.set(el,{t1:null,t2}); }, initial); holders.set(el,{t1,t2:null}); }; const end=()=>{ const h=holders.get(el); if(h){ if(h.t1) clearTimeout(h.t1); if(h.t2) clearInterval(h.t2); holders.delete(el);} }; on(el,'pointerdown',start,{passive:false}); on(el,'pointerup',end); on(el,'pointerleave',end); on(el,'pointercancel',end); }
     addHold(tcLeft, ()=>move(-1));
     addHold(tcRight, ()=>move(1));
-    addHold(tcDown, ()=>{ st.lastTick=0; /* форснем шаг падения */ });
-
+    addHold(tcDown, ()=>{ /* ускорение падения */ st.lastFall = 0; });
     on(tcRotate,'pointerdown',(e)=>{ e.preventDefault(); if(!st.running||st.paused) return; rotate(); }, {passive:false});
     on(tcDrop,'pointerdown',(e)=>{ e.preventDefault(); if(!st.running||st.paused) return; drop(); }, {passive:false});
+    on(tcJett,'pointerdown',(e)=>{ e.preventDefault(); jettison(); }, {passive:false});
     on(tcPause,'pointerdown',(e)=>{ e.preventDefault(); pause(); }, {passive:false});
 
-    // ===== Simple gestures on canvas =====
+    // Жесты на холсте: тап=поворот, свайп влево/вправо/вниз
     let touchStart=null;
     on(board,'touchstart',(e)=>{ if(!st.running) return; const t=e.changedTouches[0]; touchStart={x:t.clientX,y:t.clientY,time:performance.now()}; e.preventDefault(); }, {passive:false});
-    on(board,'touchend',(e)=>{ if(!st.running) return; const t=e.changedTouches[0]; if(!touchStart) return; const dx=t.clientX-touchStart.x, dy=t.clientY-touchStart.y; const dt=performance.now()-touchStart.time; const ax=Math.abs(dx), ay=Math.abs(dy); if(ax<12 && ay<12 && dt<180){ rotate(); } else if(ax>ay){ if(ax>20){ dx>0 ? move(1) : move(-1); } } else { if(dy>28){ drop(); } else if(dy<-28){ /* вверх — пауза */ pause(); } } touchStart=null; e.preventDefault(); }, {passive:false});
+    on(board,'touchend',(e)=>{ if(!st.running) return; const t=e.changedTouches[0]; if(!touchStart) return; const dx=t.clientX-touchStart.x, dy=t.clientY-touchStart.y; const dt=performance.now()-touchStart.time; const ax=Math.abs(dx), ay=Math.abs(dy); if(ax<12 && ay<12 && dt<180){ rotate(); } else if(ax>ay){ if(ax>20){ dx>0 ? move(1) : move(-1); } } else { if(dy>28){ drop(); } } touchStart=null; e.preventDefault(); }, {passive:false});
 
-    console.log('Ship Tetris (mobile one‑file) ready');
+    console.log('Ship Tetris (mobile one‑file) ready — seconds are real‑time now');
   })();
   </script>
 </body>
 </html>
+
